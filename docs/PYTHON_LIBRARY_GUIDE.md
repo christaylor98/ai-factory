@@ -65,7 +65,7 @@ Set your API keys in environment variables (recommended):
 ```bash
 export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
-export GOOGLE_API_KEY="..."
+export GEMINI_API_KEY="..."
 export OPENROUTER_API_KEY="sk-or-..."
 ```
 
@@ -87,11 +87,11 @@ print(result.output)
 
 ## Configuration Methods
 
-AI Factory supports three configuration methods, in order of precedence:
+AI Factory supports three configuration approaches:
 
-1. **Direct Config construction** (highest priority)
-2. **Config Loader with overrides** (recommended)
-3. **TOML files and environment variables** (most flexible)
+1. **Direct `Config` construction** (simplest)
+2. **Config loader (`load_config`) with overrides** (recommended)
+3. **TOML files + environment variables** (most flexible)
 
 ### Method 1: Direct Config Construction
 
@@ -133,11 +133,11 @@ config = load_config(
 result = run("Your prompt", config)
 ```
 
-**Config precedence (highest to lowest):**
+**Config precedence within `load_config()` (highest to lowest):**
 1. Function arguments to `load_config()`
-2. Environment variables (e.g., `AI_FACTORY_PROVIDER`)
+2. Environment variables (e.g., `AIFACTORY_PROVIDER`)
 3. `./aifactory.toml` file
-4. `~/.config/aifactory/config.toml` file
+4. `~/.aifactory/config.toml` file
 5. Built-in defaults
 
 ### Method 3: TOML Configuration File
@@ -146,6 +146,7 @@ Create `aifactory.toml` in your project directory:
 
 ```toml
 # Default settings
+[default]
 provider = "anthropic"
 model = "claude-3-5-sonnet-20241022"
 max_retries = 3
@@ -159,16 +160,9 @@ format = "json"  # or "is"
 capture_prompt = true
 capture_output = true
 capture_limit_chars = 20000
-
-[provider.openai]
-api_key_env_var = "OPENAI_API_KEY"
-
-[provider.anthropic]
-api_key_env_var = "ANTHROPIC_API_KEY"
-
-[provider.gemini]
-api_key_env_var = "GOOGLE_API_KEY"
 ```
+
+Provider API keys are always read from environment variables (or a local `.env` file), not from TOML.
 
 Then use the loader:
 
@@ -973,5 +967,4 @@ config = Config(
 
 - **README.md**: Quick start and CLI usage
 - **docs/ARCHITECTURE.md**: System design and provider contract
-- **docs/JSON_LEDGER_IMPLEMENTATION.md**: Ledger format details
 - **Configuration examples**: See `aifactory.toml.example` and `aifactory.toml.json-example`

@@ -254,8 +254,8 @@ pytest
 
 ## More docs
 
+- [docs/PYTHON_LIBRARY_GUIDE.md](docs/PYTHON_LIBRARY_GUIDE.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/AI_FACTORY.md](docs/AI_FACTORY.md)
 - [docs/APPEND_EVENT_FEATURE.md](docs/APPEND_EVENT_FEATURE.md)
 
 ## License
