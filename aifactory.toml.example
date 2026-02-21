@@ -1,0 +1,86 @@
+# ai-factory Configuration
+#
+# Place this file at:
+#   - ~/.aifactory/config.toml (global)
+#   - ./aifactory.toml (project-specific)
+#
+# Precedence order (later overrides earlier):
+#   1. Defaults (built-in)
+#   2. ~/.aifactory/config.toml
+#   3. ./aifactory.toml
+#   4. Environment variables (AIFACTORY_*)
+#   5. CLI arguments
+
+# ═══════════════════════════════════════════════════════════════
+# Default Settings
+# ═══════════════════════════════════════════════════════════════
+[default]
+# Provider to use (required if not set via CLI)
+provider = "gemini"
+
+# Model to use (required if not set via CLI)
+model = "gemini-2.5-flash"
+
+# Maximum number of retries on transient errors (429, 5xx, network)
+max_retries = 3
+
+# Base backoff delay in milliseconds
+backoff_base_ms = 250
+
+# Backoff multiplier (exponential backoff)
+# delay = backoff_base_ms * (backoff_multiplier ^ attempt)
+backoff_multiplier = 2.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# Ledger Configuration
+# ═══════════════════════════════════════════════════════════════
+[ledger]
+# Enable ledger writing (append-only execution log)
+enabled = true
+
+# Path to ledger file
+path = "./LEDGER.is"
+
+# Capture full prompt text in ledger
+# WARNING: May expose sensitive data
+capture_prompt = false
+
+# Capture full output text in ledger
+# WARNING: May expose sensitive data
+capture_output = false
+
+# Maximum characters to capture (if capture_prompt/output enabled)
+# Longer content will be truncated with metadata
+capture_limit_chars = 20000
+
+
+# ═══════════════════════════════════════════════════════════════
+# Provider-Specific Configuration
+# ═══════════════════════════════════════════════════════════════
+
+# OpenRouter-specific settings
+[openrouter]
+# HTTP Referer header (optional, for analytics)
+# Set via OPENROUTER_HTTP_REFERER environment variable
+# http_referer = "https://your-app.com"
+
+# X-Title header (optional, for analytics)
+# Set via OPENROUTER_X_TITLE environment variable
+# x_title = "Your App Name"
+
+
+# ═══════════════════════════════════════════════════════════════
+# API Keys
+# ═══════════════════════════════════════════════════════════════
+# API keys should NEVER be in config files!
+# Set them via environment variables or .env files:
+#
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   OPENAI_API_KEY=sk-...
+#   GEMINI_API_KEY=...
+#   OPENROUTER_API_KEY=sk-or-...
+#
+# Place .env files at:
+#   - ~/.aifactory/.env (global)
+#   - ./.env (project-specific)

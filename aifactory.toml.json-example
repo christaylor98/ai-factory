@@ -1,0 +1,14 @@
+# ai-factory configuration example with JSON ledger format
+
+[default]
+provider = "stub"
+model = "stub-1"
+max_retries = 2
+
+[ledger]
+enabled = true
+format = "json"  # Options: "is" (default) or "json"
+path = "./LEDGER.jsonl"  # Optional: defaults to ./LEDGER.jsonl when format=json
+capture_prompt = false
+capture_output = false
+capture_limit_chars = 20000
