@@ -35,9 +35,13 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
+mcp = [
+    "mcp>=1.2.0",
+]
 
 [project.scripts]
 ai-factory = "ai_factory.cli:main"
+ai-factory-mcp = "ai_factory.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

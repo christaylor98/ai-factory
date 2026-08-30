@@ -10,7 +10,7 @@ import time
 from typing import Optional
 
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo, RetryRecord
+from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
 from .base import BaseProvider
 
 
@@ -259,4 +259,19 @@ class CopilotCLIProvider(BaseProvider):
             "Available models: claude-sonnet-4.5, claude-haiku-4.5, "
             "gpt-5.2-codex, gpt-5.2, gpt-5.1, gpt-5, gpt-5-mini, gpt-4.1, etc. "
             "Use --model flag or see 'copilot --help' for full list."
+        )
+    
+    def embed(self, text: str) -> EmbedResult:
+        """Copilot CLI does not support embedding generation."""
+        metrics = Metrics(
+            input_chars=len(text),
+            output_chars=0,
+            latency_ms=1,
+            success=False
+        )
+        return EmbedResult(
+            vector=[],
+            success=False,
+            error="Copilot CLI provider does not support embedding generation",
+            metrics=metrics
         )

@@ -12,7 +12,7 @@ except ImportError:
     _has_openai_sdk = False
 
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo, RetryRecord
+from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
 from .base import BaseProvider
 
 
@@ -261,3 +261,64 @@ class OpenAIProvider(BaseProvider):
                 metadata={"description": "GPT-3.5 Turbo model"}
             ),
         ]
+    
+    def embed(self, text: str) -> EmbedResult:
+        """
+        Generate embeddings using OpenAI embedding model.
+        
+        Uses text-embedding-3-small by default.
+        
+        Args:
+            text: Input text to embed
+            
+        Returns:
+            EmbedResult with vector, success, error, and metrics
+        """
+        start_time = time.perf_counter()
+        
+        try:
+            # Use OpenAI embedding model
+            response = self.client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            
+            # Extract vector from response
+            vector = response.data[0].embedding
+            
+            # Calculate metrics
+            end_time = time.perf_counter()
+            latency_ms = max(1, int((end_time - start_time) * 1000))
+            
+            metrics = Metrics(
+                input_chars=len(text),
+                output_chars=0,
+                latency_ms=latency_ms,
+                success=True
+            )
+            
+            return EmbedResult(
+                vector=list(vector),
+                success=True,
+                error=None,
+                metrics=metrics
+            )
+        
+        except Exception as e:
+            # Calculate metrics for failure
+            end_time = time.perf_counter()
+            latency_ms = max(1, int((end_time - start_time) * 1000))
+            
+            metrics = Metrics(
+                input_chars=len(text),
+                output_chars=0,
+                latency_ms=latency_ms,
+                success=False
+            )
+            
+            return EmbedResult(
+                vector=[],
+                success=False,
+                error=f"{type(e).__name__}: {str(e)}",
+                metrics=metrics
+            )

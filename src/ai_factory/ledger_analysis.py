@@ -21,6 +21,11 @@ class RunRecord:
     latency_ms: int = 0
     cost_usd: Optional[float] = None
     retry_count: int = 0
+    cost_estimated: Optional[bool] = None
+    token_source: Optional[str] = None
+    price_source: Optional[str] = None
+    cache_creation_input_tokens: Optional[int] = None
+    cache_read_input_tokens: Optional[int] = None
 
 
 @dataclass
@@ -65,6 +70,15 @@ class LedgerSummary:
     total_latency_ms: int = 0
     total_cost_usd: float = 0.0
     cost_entries: int = 0
+    # Spend is split by confidence so an estimate is never presented as a
+    # measurement. total_cost_usd remains the sum of both.
+    estimated_cost_usd: float = 0.0
+    estimated_cost_entries: int = 0
+    exact_cost_usd: float = 0.0
+    exact_cost_entries: int = 0
+    stale_price_entries: int = 0
+    total_cache_creation_input_tokens: int = 0
+    total_cache_read_input_tokens: int = 0
     total_retry_count: int = 0
     runs_with_retries: int = 0
     max_latency_ms: int = 0
@@ -207,6 +221,28 @@ def _parse_run_block(block: str) -> Optional[RunRecord]:
                         record.cost_usd = float(val)
                     except ValueError:
                         pass
+            elif "(cost_estimated" in stripped:
+                val = _parse_simple_value(stripped)
+                if val:
+                    record.cost_estimated = (val.strip().lower() == "true")
+            elif "(token_source" in stripped:
+                record.token_source = _parse_simple_value(stripped) or None
+            elif "(price_source" in stripped:
+                record.price_source = _parse_simple_value(stripped) or None
+            elif "(cache_creation_input_tokens" in stripped:
+                val = _parse_simple_value(stripped)
+                if val:
+                    try:
+                        record.cache_creation_input_tokens = int(val)
+                    except ValueError:
+                        pass
+            elif "(cache_read_input_tokens" in stripped:
+                val = _parse_simple_value(stripped)
+                if val:
+                    try:
+                        record.cache_read_input_tokens = int(val)
+                    except ValueError:
+                        pass
         else:
             if stripped.startswith("(provider"):
                 val = _parse_simple_value(stripped)
@@ -309,7 +345,20 @@ def compute_summary(records: List[RunRecord]) -> LedgerSummary:
         if record.cost_usd is not None:
             summary.total_cost_usd += record.cost_usd
             summary.cost_entries += 1
-        
+            if record.cost_estimated:
+                summary.estimated_cost_usd += record.cost_usd
+                summary.estimated_cost_entries += 1
+            else:
+                summary.exact_cost_usd += record.cost_usd
+                summary.exact_cost_entries += 1
+            if record.price_source == "pricing_table_stale":
+                summary.stale_price_entries += 1
+
+        if record.cache_creation_input_tokens:
+            summary.total_cache_creation_input_tokens += record.cache_creation_input_tokens
+        if record.cache_read_input_tokens:
+            summary.total_cache_read_input_tokens += record.cache_read_input_tokens
+
         if record.retry_count > 0:
             summary.total_retry_count += record.retry_count
             summary.runs_with_retries += 1
@@ -379,6 +428,29 @@ def format_summary(summary: LedgerSummary) -> str:
         lines.extend([
             "",
             f"Total Cost: ${summary.total_cost_usd_if_available:.4f}",
+        ])
+        # Never present an estimate as a measurement: show the split whenever
+        # any part of the total is derived rather than reported.
+        if summary.estimated_cost_entries:
+            lines.append(
+                f"  measured:  ${summary.exact_cost_usd:.4f} "
+                f"({summary.exact_cost_entries} runs)"
+            )
+            lines.append(
+                f"  ESTIMATED: ${summary.estimated_cost_usd:.4f} "
+                f"({summary.estimated_cost_entries} runs, from character counts)"
+            )
+        if summary.stale_price_entries:
+            lines.append(
+                f"  {summary.stale_price_entries} run(s) priced from a stale table "
+                f"- run: ai-factory pricing refresh"
+            )
+
+    if summary.total_cache_read_input_tokens or summary.total_cache_creation_input_tokens:
+        lines.extend([
+            "",
+            f"Cache Write Tokens: {summary.total_cache_creation_input_tokens}",
+            f"Cache Read Tokens:  {summary.total_cache_read_input_tokens}",
         ])
     
     if summary.most_used_model:

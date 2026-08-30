@@ -10,10 +10,11 @@ Ledger failures must NOT fail the run.
 """
 import os
 import json
+import hashlib
 from datetime import datetime
 from typing import Optional, Protocol
 from .config import Config
-from .result import ProviderResponse, Metrics
+from .result import ProviderResponse, Metrics, EmbedResult
 
 
 def _truncate_with_metadata(
@@ -131,8 +132,22 @@ class ISSerializer:
             lines.append(f"    (completion_tokens {metrics.completion_tokens})")
         if metrics.total_tokens is not None:
             lines.append(f"    (total_tokens {metrics.total_tokens})")
+        if metrics.reasoning_tokens is not None:
+            lines.append(f"    (reasoning_tokens {metrics.reasoning_tokens})")
+        if metrics.cache_creation_input_tokens is not None:
+            lines.append(f"    (cache_creation_input_tokens {metrics.cache_creation_input_tokens})")
+        if metrics.cache_read_input_tokens is not None:
+            lines.append(f"    (cache_read_input_tokens {metrics.cache_read_input_tokens})")
         if metrics.cost_usd is not None:
-            lines.append(f"    (cost_usd {metrics.cost_usd})")
+            lines.append(f"    (cost_usd {metrics.cost_usd:.8f})")
+        # Provenance, so a reader never has to guess whether a number was
+        # measured or derived.
+        if metrics.token_source is not None:
+            lines.append(f"    (token_source {_escape_is_string(metrics.token_source)})")
+        if metrics.price_source is not None:
+            lines.append(f"    (price_source {_escape_is_string(metrics.price_source)})")
+        if metrics.cost_estimated is not None:
+            lines.append(f"    (cost_estimated {str(metrics.cost_estimated).lower()})")
         if metrics.finish_reason is not None:
             lines.append(f"    (finish_reason {_escape_is_string(metrics.finish_reason)})")
         if metrics.provider_metadata is not None:
@@ -205,8 +220,20 @@ class JSONSerializer:
             entry["metrics"]["completion_tokens"] = metrics.completion_tokens
         if metrics.total_tokens is not None:
             entry["metrics"]["total_tokens"] = metrics.total_tokens
+        if metrics.reasoning_tokens is not None:
+            entry["metrics"]["reasoning_tokens"] = metrics.reasoning_tokens
+        if metrics.cache_creation_input_tokens is not None:
+            entry["metrics"]["cache_creation_input_tokens"] = metrics.cache_creation_input_tokens
+        if metrics.cache_read_input_tokens is not None:
+            entry["metrics"]["cache_read_input_tokens"] = metrics.cache_read_input_tokens
         if metrics.cost_usd is not None:
             entry["metrics"]["cost_usd"] = metrics.cost_usd
+        if metrics.token_source is not None:
+            entry["metrics"]["token_source"] = metrics.token_source
+        if metrics.price_source is not None:
+            entry["metrics"]["price_source"] = metrics.price_source
+        if metrics.cost_estimated is not None:
+            entry["metrics"]["cost_estimated"] = metrics.cost_estimated
         if metrics.finish_reason is not None:
             entry["metrics"]["finish_reason"] = metrics.finish_reason
         if metrics.provider_metadata is not None:
@@ -281,6 +308,73 @@ def write_run_to_ledger(
     
     except Exception as e:
         print(f"Warning: Failed to write to ledger: {e}", flush=True)
+
+
+def write_embed_to_ledger(
+    config: Config,
+    text: str,
+    result: EmbedResult
+) -> None:
+    """
+    Write an embed entry to the ledger.
+    Ledger failures are logged but do not raise exceptions.
+    
+    Does NOT store the full vector or raw input text.
+    Stores SHA256 hash of input for reproducibility verification.
+    """
+    if not config.ledger_enabled:
+        return
+    
+    try:
+        timestamp = datetime.utcnow().isoformat() + "Z"
+        
+        # Calculate SHA256 hash of input text
+        text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        
+        if config.ledger_format == "json":
+            # JSON Lines format
+            entry = {
+                "type": "embed",
+                "timestamp": timestamp,
+                "provider": config.provider,
+                "model": config.model,
+                "input_chars": result.metrics.input_chars,
+                "vector_dim": len(result.vector),
+                "latency_ms": result.metrics.latency_ms,
+                "success": result.success,
+                "input_hash": text_hash,
+            }
+            
+            if result.error:
+                entry["error"] = result.error
+            
+            ledger_entry = json.dumps(entry, ensure_ascii=False)
+        else:
+            # IS format (default)
+            lines = [
+                "(embed",
+                f"  (timestamp {_escape_is_string(timestamp)})",
+                f"  (provider {_escape_is_string(config.provider)})",
+                f"  (model {_escape_is_string(config.model)})",
+                f"  (input_chars {result.metrics.input_chars})",
+                f"  (vector_dim {len(result.vector)})",
+                f"  (latency_ms {result.metrics.latency_ms})",
+                f"  (success {str(result.success).lower()})",
+                f"  (input_hash {_escape_is_string(text_hash)})",
+            ]
+            
+            if result.error:
+                lines.append(f"  (error {_escape_is_string(result.error)})")
+            
+            lines.append(")")
+            ledger_entry = "\n".join(lines)
+        
+        with open(config.ledger_path, "a", encoding="utf-8") as f:
+            f.write(ledger_entry)
+            f.write("\n")
+    
+    except Exception as e:
+        print(f"Warning: Failed to write embed entry to ledger: {e}", flush=True)
 
 
 def append_event(

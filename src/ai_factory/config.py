@@ -24,7 +24,19 @@ class Config:
     capture_prompt: bool = False
     capture_output: bool = False
     capture_limit_chars: int = 20000
-    
+    base_url: str = None  # Optional: override default provider base URL (e.g., for Ollama)
+
+    # Cost accounting.
+    #   chars_per_token       divisor used only when a provider reports no usage
+    #   pricing_path          override for ~/.aifactory/pricing.toml
+    #   pricing_max_age_days  table age past which prices are marked stale and
+    #                         a one-time warning is printed (0 disables ageing)
+    #   pricing_enabled       set False to skip price lookup entirely
+    chars_per_token: float = 4.0
+    pricing_path: str = None
+    pricing_max_age_days: int = 10
+    pricing_enabled: bool = True
+
     def __post_init__(self):
         """Validate configuration."""
         if self.max_retries < 0:
@@ -37,3 +49,7 @@ class Config:
             raise ValueError("capture_limit_chars must be > 0")
         if self.ledger_format not in ("is", "json"):
             raise ValueError("ledger_format must be 'is' or 'json'")
+        if self.chars_per_token <= 0:
+            raise ValueError("chars_per_token must be > 0")
+        if self.pricing_max_age_days < 0:
+            raise ValueError("pricing_max_age_days must be >= 0")

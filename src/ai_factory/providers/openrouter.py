@@ -14,7 +14,7 @@ except ImportError:
     _has_openai_sdk = False
 
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo, RetryRecord
+from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
 from .base import BaseProvider
 
 
@@ -259,3 +259,18 @@ class OpenRouterProvider(BaseProvider):
             raise NotImplementedError(
                 f"Model listing not supported for OpenRouter: {str(e)}"
             )
+    
+    def embed(self, text: str) -> EmbedResult:
+        """OpenRouter does not support embedding generation."""
+        metrics = Metrics(
+            input_chars=len(text),
+            output_chars=0,
+            latency_ms=1,
+            success=False
+        )
+        return EmbedResult(
+            vector=[],
+            success=False,
+            error="OpenRouter provider does not support embedding generation",
+            metrics=metrics
+        )

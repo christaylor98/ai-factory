@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo
+from ..result import ProviderResponse, ModelInfo, EmbedResult
 
 
 class BaseProvider(ABC):
@@ -43,5 +43,18 @@ class BaseProvider(ABC):
         
         Returns:
             List of ModelInfo objects
+        """
+        pass
+    
+    @abstractmethod
+    def embed(self, text: str) -> EmbedResult:
+        """
+        Generate embeddings for the given text.
+        
+        Args:
+            text: Input text to embed
+            
+        Returns:
+            EmbedResult with vector, success flag, error (if any), and metrics
         """
         pass

@@ -3,7 +3,7 @@ Stub provider for testing and demonstration
 """
 import time
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo, RetryRecord
+from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
 from .base import BaseProvider
 
 
@@ -114,3 +114,37 @@ class StubProvider(BaseProvider):
                 metadata={"description": "Second stub model"}
             ),
         ]
+    
+    def embed(self, text: str) -> EmbedResult:
+        """
+        Generate deterministic stub embeddings.
+        
+        Returns a fixed-length zero vector for deterministic testing.
+        
+        Args:
+            text: Input text to embed
+            
+        Returns:
+            EmbedResult with deterministic 8-dimensional zero vector
+        """
+        start_time = time.perf_counter()
+        
+        # Simulate small processing delay
+        time.sleep(0.001)
+        
+        end_time = time.perf_counter()
+        latency_ms = max(1, int((end_time - start_time) * 1000))
+        
+        metrics = Metrics(
+            input_chars=len(text),
+            output_chars=0,
+            latency_ms=latency_ms,
+            success=True
+        )
+        
+        return EmbedResult(
+            vector=[0.0] * 8,
+            success=True,
+            error=None,
+            metrics=metrics
+        )

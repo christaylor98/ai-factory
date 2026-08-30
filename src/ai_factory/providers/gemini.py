@@ -19,7 +19,7 @@ except ImportError:
         _using_new_sdk = None
 
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo, RetryRecord
+from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
 from .base import BaseProvider
 
 
@@ -271,3 +271,94 @@ class GeminiProvider(BaseProvider):
                 metadata={"description": "Gemini Pro model"}
             ),
         ]
+    
+    def embed(self, text: str) -> EmbedResult:
+        """
+        Generate embeddings using Gemini embedding model.
+        
+        Uses the configured model from Config. Currently available:
+        - gemini-embedding-001 (3072-dimensional embeddings)
+        
+        Args:
+            text: Input text to embed
+            
+        Returns:
+            EmbedResult with vector, success, error, and metrics
+        """
+        start_time = time.perf_counter()
+        
+        try:
+            # Use configured embedding model
+            # For new SDK, self.model_name already has "models/" prefix
+            # For legacy SDK, construct from config.model
+            if _using_new_sdk:
+                if hasattr(self, 'model_name') and self.model_name:
+                    embedding_model = self.model_name
+                else:
+                    # Fallback: construct from config
+                    cfg_model = self.config.model
+                    embedding_model = cfg_model if cfg_model.startswith('models/') else f'models/{cfg_model}'
+            else:
+                # Legacy SDK
+                cfg_model = self.config.model
+                embedding_model = cfg_model if cfg_model.startswith('models/') else f'models/{cfg_model}'
+            
+            # Call embedding API
+            if _using_new_sdk:
+                # New SDK
+                response = self.client.models.embed_content(
+                    model=embedding_model,
+                    contents=text
+                )
+                # Extract embedding from response
+                # New SDK returns embeddings (plural) array
+                if hasattr(response, 'embeddings') and response.embeddings:
+                    vector = response.embeddings[0].values
+                elif hasattr(response, 'embedding'):
+                    vector = response.embedding.values
+                else:
+                    raise ValueError(f"Unexpected response structure: {dir(response)}")
+            else:
+                # Legacy SDK
+                result = genai.embed_content(
+                    model=embedding_model,
+                    content=text
+                )
+                vector = result['embedding']
+            
+            # Calculate metrics
+            end_time = time.perf_counter()
+            latency_ms = max(1, int((end_time - start_time) * 1000))
+            
+            metrics = Metrics(
+                input_chars=len(text),
+                output_chars=0,  # Embeddings don't produce text output
+                latency_ms=latency_ms,
+                success=True
+            )
+            
+            return EmbedResult(
+                vector=list(vector),
+                success=True,
+                error=None,
+                metrics=metrics
+            )
+        
+        except Exception as e:
+            # Calculate metrics for failure
+            end_time = time.perf_counter()
+            latency_ms = max(1, int((end_time - start_time) * 1000))
+            
+            metrics = Metrics(
+                input_chars=len(text),
+                output_chars=0,
+                latency_ms=latency_ms,
+                success=False
+            )
+            
+            return EmbedResult(
+                vector=[],
+                success=False,
+                error=f"{type(e).__name__}: {str(e)}",
+                metrics=metrics
+            )

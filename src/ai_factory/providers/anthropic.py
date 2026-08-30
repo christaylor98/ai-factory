@@ -12,7 +12,7 @@ except ImportError:
     _has_anthropic_sdk = False
 
 from ..config import Config
-from ..result import ProviderResponse, ModelInfo, RetryRecord
+from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
 from .base import BaseProvider
 
 
@@ -249,3 +249,18 @@ class AnthropicProvider(BaseProvider):
                 metadata={"description": "Claude 3 Opus"}
             ),
         ]
+    
+    def embed(self, text: str) -> EmbedResult:
+        """Anthropic does not support embedding generation."""
+        metrics = Metrics(
+            input_chars=len(text),
+            output_chars=0,
+            latency_ms=1,
+            success=False
+        )
+        return EmbedResult(
+            vector=[],
+            success=False,
+            error="Anthropic provider does not support embedding generation",
+            metrics=metrics
+        )
