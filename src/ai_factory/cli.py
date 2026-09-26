@@ -6,6 +6,7 @@ Thin wrapper over the library API with no business logic.
 import sys
 import argparse
 from .config import Config
+from .env import load_env
 from .config_loader import load_config
 from .runner import run, list_models, embed
 from .ledger_analysis import analyze_ledger, format_summary
@@ -241,6 +242,7 @@ def main() -> int:
     Returns:
         Exit code
     """
+    load_env()   # the CLI reads .env for provider keys, as it always has
     parser = argparse.ArgumentParser(
         prog="ai-factory",
         description="AI Factory - Minimal LLM execution"

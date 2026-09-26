@@ -13,6 +13,7 @@ from mcp.server.fastmcp import FastMCP
 
 from ..config import Config
 from ..config_loader import load_config
+from ..env import load_env
 from ..ledger import append_event as _append_event
 from ..ledger_analysis import analyze_ledger as _analyze_ledger
 from ..runner import embed as _embed
@@ -204,4 +205,5 @@ def analyze_ledger(ledger_path: Optional[str] = None) -> dict[str, Any]:
 
 def main() -> None:
     """Entry point for `ai-factory-mcp` and `python -m ai_factory.mcp_server`."""
+    load_env()   # the server reads .env for provider keys, as it always has (the launcher cd's for this)
     mcp.run()
