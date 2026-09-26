@@ -1,6 +1,17 @@
 # ai-factory
 
-Minimal, deterministic single-prompt LLM runner (library + CLI) with mechanical retries and an append-only execution ledger.
+Minimal, deterministic LLM runner (library + CLI) with mechanical retries and an append-only execution ledger:
+one model interaction at a time, either a single prompt or a streamed agent run.
+
+```python
+from ai_factory import Config, run
+
+result = run("Say hello in five words.", Config(provider="stub", model="any", ledger_enabled=False))
+print(result.success, result.output)
+```
+
+Swap `provider="stub"` for `gemini`, `openai`, `anthropic`, `openrouter`, `ollama`, `local` (any
+OpenAI-compatible server on your machine) or `claude_code` (your logged-in `claude` CLI).
 
 ## What this is
 
@@ -9,11 +20,14 @@ Minimal, deterministic single-prompt LLM runner (library + CLI) with mechanical 
 - Log every run to an append-only ledger (IS by default, JSONL optional).
 - Keep configuration immutable once loaded.
 - Capture provider metadata (raw API response data) for traceability.
+- Optionally, run one agent session on the `claude` CLI, streamed, steerable and cancellable
+  (`start_agent`, see [Agent runs](#agent-runs)).
 
 ## What this is not
 
 - A multi-turn chat framework.
-- A workflow/orchestration or agent framework.
+- A workflow/orchestration or agent framework: `start_agent` runs one session and reports what happened; what to
+  do next is the caller's decision.
 - Async-first (execution is synchronous).
 
 ## Install
@@ -23,7 +37,8 @@ Requirements: Python 3.9+.
 From PyPI (once published):
 
 ```bash
-pip install ai-factory
+pip install ai-factory               # the core: stub, claude_code, ollama, copilot_cli
+pip install "ai-factory[gemini]"     # plus a provider SDK: gemini, openai, openrouter, local, anthropic, or all
 ```
 
 From source (this repo):
@@ -38,7 +53,30 @@ For development:
 pip install -e ".[dev]"
 ```
 
-Note: This project currently declares provider SDKs as normal dependencies (Anthropic/OpenAI/Gemini). If you are vendoring or slimming dependencies, adjust your installation strategy accordingly.
+Provider SDKs are extras: a provider whose SDK is missing fails its run with an install message.
+
+`import ai_factory` does not touch your environment. Up to 1.0 it loaded a `.env` on import; now the CLI and the
+MCP server load it themselves, and a library user calls `ai_factory.load_env()` when they want it.
+
+## Agent runs
+
+`start_agent` runs one headless `claude -p` session with tools and streams what it does:
+
+```python
+from ai_factory import AgentSpec, start_agent
+
+run = start_agent(AgentSpec(prompt="Fix the failing test", model="sonnet",
+                            mcp_servers={"tools": {"type": "stdio", "command": "my-tools"}},
+                            allowed_tools=["mcp__tools__read", "mcp__tools__edit"],
+                            steerable=True, tags={"job": "J7"}))
+for event in run.events():      # started, call, usage, tool_use, tool_result, steer_echo, result, end
+    print(event["type"])
+answer = run.wait()             # AgentResult; AgentRunError or ToolPolicyError when it failed
+```
+
+`run.steer(text)` sends a message into the running turn (delivered when the `steer_echo` event arrives);
+`run.cancel()` kills its whole process tree. Which tools a run may use is your policy: pass the lists, and a run
+that used any other tool fails. With a `Config`, each run writes one ledger row, tagged, with its usage.
 
 ## Quickstart (CLI)
 

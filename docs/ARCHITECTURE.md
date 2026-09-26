@@ -6,10 +6,15 @@
 
 AI-Factory is:
 
-> A deterministic prompt execution engine
+> A deterministic execution engine for one model interaction: a single prompt, or one streamed agent run
 > With mechanical retry
 > With append-only human-readable ledger logging (`is` format)
 > And provider capability discovery (model listing)
+
+Single-prompt `run()` is the first and simplest entry point, and adding agent runs changed nothing about it.
+`start_agent()` (agent.py, since 1.1) runs one `claude -p` session with tools: it streams events, can be steered
+and cancelled, and writes one ledger row. It starts one process and reports what happened. Deciding what to do
+next stays with the caller, so it is not a workflow engine.
 
 It is **not**:
 
