@@ -241,3 +241,64 @@ def test_no_config_means_no_ledger(fake, tmp_path, monkeypatch):
     kw, _ = fake(good_stream())
     go(kw, schema=ANSWER).wait()
     assert not any(tmp_path.glob("LEDGER*"))
+
+
+# --- the inbox at a result (lifted from axChat's K84/K86/K95 tests) ---------------------------------------------
+
+class _Stdin:
+    def __init__(self):
+        self.lines, self.closed = [], False
+
+    def write(self, text):
+        self.lines.append(text)
+
+    def flush(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+def _parser_with_inbox():
+    from ai_factory.agent import Inbox, StreamParser
+    events, box, stdin = [], Inbox(), _Stdin()
+    box.attach(stdin)
+    return StreamParser(events.append, box), box, stdin, events
+
+
+def test_only_our_own_message_counts_as_a_delivered_steer():            # K84
+    p, box, stdin, events = _parser_with_inbox()
+    box.send("mine", "steer")
+    p.feed(json.dumps({"type": "user", "isReplay": True, "uuid": "the-prompt", "message": {"content": []}}))
+    assert box.echoed == {} and not [e for e in events if e["type"] == "steer_echo"]
+    p.feed(json.dumps({"type": "user", "isReplay": True, "uuid": "mine", "message": {"content": []}}))
+    assert list(box.echoed) == ["mine"]
+
+
+def test_stdin_stays_open_at_a_result_while_a_steer_is_on_its_way(monkeypatch):   # K86
+    import ai_factory.agent as agent_mod
+    monkeypatch.setattr(agent_mod, "STEER_WAIT_S", 30)
+    p, box, stdin, _ = _parser_with_inbox()
+    box.send("late", "x")
+    p.feed(json.dumps(result({"a": 1})))
+    assert not stdin.closed
+    p.feed(json.dumps({"type": "user", "isReplay": True, "uuid": "late", "message": {"content": []}}))
+    p.feed(json.dumps(result({"a": 2})))
+    assert stdin.closed
+
+
+def test_a_paused_run_keeps_stdin_open_at_a_result(monkeypatch):          # K95
+    import ai_factory.agent as agent_mod
+    monkeypatch.setattr(agent_mod, "STEER_WAIT_S", 30)
+    p, box, stdin, _ = _parser_with_inbox()
+    box.held = True
+    p.feed(json.dumps(result({"a": 1})))
+    assert not stdin.closed
+    box.release()
+    assert stdin.closed
+
+
+def test_an_idle_run_closes_stdin_at_its_result():
+    p, box, stdin, _ = _parser_with_inbox()
+    p.feed(json.dumps(result({"a": 1})))
+    assert stdin.closed
