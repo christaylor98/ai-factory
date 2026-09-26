@@ -15,7 +15,7 @@ except ImportError:
 
 from ..config import Config
 from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
-from .base import BaseProvider
+from .base import BaseProvider, chat_messages, response_format
 
 
 class OpenRouterProvider(BaseProvider):
@@ -25,6 +25,8 @@ class OpenRouterProvider(BaseProvider):
     Requires OPENROUTER_API_KEY environment variable.
     Optional: OPENROUTER_HTTP_REFERER, OPENROUTER_X_TITLE for identification.
     """
+
+    SUPPORTS_SYSTEM = SUPPORTS_SCHEMA = True
     
     def __init__(self, config: Config):
         """Initialize OpenRouter provider."""
@@ -120,10 +122,10 @@ class OpenRouterProvider(BaseProvider):
                 # Make the API call
                 create_kwargs = {
                     "model": self.config.model,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": chat_messages(self.config, prompt),
                 }
+                if response_format(self.config):
+                    create_kwargs["response_format"] = response_format(self.config)
                 if self.config.temperature is not None:
                     create_kwargs["temperature"] = self.config.temperature
                 if self.config.max_tokens is not None:

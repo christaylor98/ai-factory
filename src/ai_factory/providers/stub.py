@@ -16,6 +16,8 @@ class StubProvider(BaseProvider):
     - Prompts containing "__FAIL__": fail all attempts
     - Prompts containing "__FLAKE__": fail first attempt, succeed on retry
     """
+
+    SUPPORTS_SYSTEM = SUPPORTS_SCHEMA = True   # it echoes; with a schema it answers "{}"
     
     def call(self, prompt: str) -> ProviderResponse:
         """
@@ -73,7 +75,7 @@ class StubProvider(BaseProvider):
                     )
             else:
                 # Success
-                response_text = f"STUB: {prompt}"
+                response_text = "{}" if self.config.json_schema else f"STUB: {prompt}"
                 return ProviderResponse(
                     text=response_text,
                     metadata={"stub": True},

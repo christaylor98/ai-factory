@@ -13,7 +13,7 @@ except ImportError:
 
 from ..config import Config
 from ..result import ProviderResponse, ModelInfo, RetryRecord, EmbedResult, Metrics
-from .base import BaseProvider
+from .base import BaseProvider, chat_messages, response_format
 
 
 class OpenAIProvider(BaseProvider):
@@ -22,6 +22,8 @@ class OpenAIProvider(BaseProvider):
     
     Requires OPENAI_API_KEY environment variable.
     """
+
+    SUPPORTS_SYSTEM = SUPPORTS_SCHEMA = True
     
     def __init__(self, config: Config):
         """Initialize OpenAI provider."""
@@ -58,10 +60,10 @@ class OpenAIProvider(BaseProvider):
         """Arguments for chat.completions.create."""
         kwargs = {
             "model": self.config.model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": chat_messages(self.config, prompt),
         }
+        if response_format(self.config):
+            kwargs["response_format"] = response_format(self.config)
         if self.config.temperature is not None:
             kwargs["temperature"] = self.config.temperature
         if self.config.max_tokens is not None:

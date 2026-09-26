@@ -8,8 +8,26 @@ from ..config import Config
 from ..result import ProviderResponse, ModelInfo, EmbedResult
 
 
+def chat_messages(config: Config, prompt: str) -> list[dict]:
+    """OpenAI-style messages: the system prompt (if any), then the prompt."""
+    system = [{"role": "system", "content": config.system_prompt}] if config.system_prompt else []
+    return system + [{"role": "user", "content": prompt}]
+
+
+def response_format(config: Config) -> Optional[dict]:
+    """OpenAI-style structured output for config.json_schema, or None."""
+    if not config.json_schema:
+        return None
+    return {"type": "json_schema", "json_schema": {"name": "answer", "schema": config.json_schema, "strict": False}}
+
+
 class BaseProvider(ABC):
     """Base class for all AI providers."""
+
+    # Whether call() honours config.system_prompt / config.json_schema. run() refuses a config that sets one
+    # for a provider that does not, instead of the provider silently ignoring it.
+    SUPPORTS_SYSTEM = False
+    SUPPORTS_SCHEMA = False
     
     def __init__(self, config: Config):
         """

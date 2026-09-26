@@ -30,6 +30,11 @@ class Config:
     max_tokens: Optional[int] = None  # Optional: output token cap (provider default if unset)
     timeout_s: Optional[float] = None  # Optional: per-request timeout (SDK default if unset)
     thinking: bool = False  # local provider: let the chat template think; off spends max_tokens on answers only
+    # A system prompt and a JSON schema for the answer. Only providers that declare SUPPORTS_SYSTEM /
+    # SUPPORTS_SCHEMA take them (claude_code, openai, local, openrouter, stub); run() refuses them elsewhere
+    # rather than dropping them silently. With a schema, RunResult.output is the answer as a JSON string.
+    system_prompt: Optional[str] = None
+    json_schema: Optional[dict] = None
 
     # Cost accounting.
     #   chars_per_token       divisor used only when a provider reports no usage

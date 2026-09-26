@@ -53,6 +53,8 @@ class ClaudeCodeProvider(BaseProvider):
     unaffected.
     """
 
+    SUPPORTS_SYSTEM = SUPPORTS_SCHEMA = True
+
     def __init__(self, config: Config):
         """Initialize Claude Code CLI provider."""
         super().__init__(config)
@@ -108,6 +110,10 @@ class ClaudeCodeProvider(BaseProvider):
         cmd = [self.claude_bin, "-p", prompt, "--output-format", "json", "--permission-prompts", "none"]
         if model:
             cmd += ["--model", model]
+        if self.config.system_prompt:
+            cmd += ["--system-prompt", self.config.system_prompt]
+        if self.config.json_schema:
+            cmd += ["--json-schema", json.dumps(self.config.json_schema)]
 
         retry_history = []
         attempts = 0
@@ -199,8 +205,15 @@ class ClaudeCodeProvider(BaseProvider):
                     error=payload.get("result") or "claude reported is_error=true",
                 )
 
+            text = payload.get("result", "")
+            if self.config.json_schema:   # the answer is the schema'd object, as a JSON string
+                if payload.get("structured_output") is None:
+                    return ProviderResponse(text="", metadata=metadata, attempts=attempts,
+                                            retry_history=retry_history,
+                                            error="claude returned no structured_output for the json_schema")
+                text = json.dumps(payload["structured_output"])
             return ProviderResponse(
-                text=payload.get("result", ""),
+                text=text,
                 metadata=metadata,
                 attempts=attempts,
                 retry_history=retry_history,

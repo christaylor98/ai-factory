@@ -47,7 +47,14 @@ def run(prompt: str, config: Config) -> RunResult:
     try:
         # Get provider
         provider = get_provider(config.provider, config)
-        
+        unsupported = [name for name, value, ok in (
+            ("system_prompt", config.system_prompt, provider.SUPPORTS_SYSTEM),
+            ("json_schema", config.json_schema, provider.SUPPORTS_SCHEMA)) if value and not ok]
+        if unsupported:   # refused, not silently dropped
+            return RunResult(output="", success=False,
+                             metrics=build_metrics(input_chars=len(prompt), output_chars=0, latency_ms=1, success=False),
+                             error=f"provider {config.provider!r} does not support {' or '.join(unsupported)}")
+
         # Call provider (retry logic is internal to provider)
         response = provider.call(prompt)
 
