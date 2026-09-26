@@ -159,7 +159,35 @@ Provider names are the exact strings used in config/CLI.
 | `anthropic` | `ANTHROPIC_API_KEY` | ✅ | Uses a fallback list (Anthropic has no public models API) |
 | `openrouter` | `OPENROUTER_API_KEY` | ❌ | Model listing is not supported (raises `NotImplementedError`) |
 | `copilot_cli` | `copilot` CLI login | ❌ | Requires the `copilot` binary in `PATH`; model listing not supported |
+| `local` | none | ✅ | Any OpenAI-compatible local server (llama-server, ollama `/v1`); default `http://localhost:8089/v1`, model optional, $0 cost. See below |
+| `ollama` | none | ✅ | Ollama's native API at `http://localhost:11434`; $0 cost. See [docs/OLLAMA_PROVIDER.md](docs/OLLAMA_PROVIDER.md) |
+| `claude_code` | `claude` CLI login | ✅ (aliases) | Shells out to `claude -p`; rides the Claude Code subscription |
 | `stub` | none | ✅ | For tests/demos (`__FAIL__`, `__FLAKE__` behaviors) |
+
+### Local inference (`local`)
+
+`provider = "local"` sends prompts to an OpenAI-compatible server on your
+machine or LAN. No key, and the ledger records a cost of $0.
+
+- `base_url` defaults to `http://localhost:8089/v1`; a bare `host:port` gets `/v1` added.
+- `model` is optional. With none given, the one model the server lists is used
+  and recorded; a server listing several asks you to name one. The `[default]`
+  model and `AIFACTORY_MODEL` are ignored for `local`, since they name another
+  provider's model.
+- Thinking is off (`chat_template_kwargs.enable_thinking = false`, honoured by
+  llama-server) so `max_tokens` is spent on the answer. Turn it on with
+  `thinking = true`, `AIFACTORY_THINKING=1` or the `thinking` MCP argument.
+- An empty answer is a failure: "reasoning exhausted max_tokens" when the
+  model only thought, "output truncated at max_tokens before any content"
+  otherwise.
+- A down server fails at once, without retries: "local server not reachable at ...".
+
+```toml
+[local]
+base_url = "http://localhost:8089/v1"
+# model = "gemma.gguf"
+# thinking = false
+```
 
 ## Ledger
 

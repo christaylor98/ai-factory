@@ -121,8 +121,18 @@ class GeminiProvider(BaseProvider):
                 
                 # Convert response to dict for full capture
                 try:
-                    # Gemini response objects may have to_dict or similar
-                    if hasattr(response, 'to_dict'):
+                    if hasattr(response, 'model_dump'):
+                        # New SDK (google.genai): response is a pydantic
+                        # BaseModel. model_dump(mode="json") recursively
+                        # converts nested models (Candidate, Content, Part,
+                        # UsageMetadata, ...) to plain JSON-safe values.
+                        # Serializing those nested models by hand (e.g. via
+                        # __dict__ below) leaves raw pydantic instances in
+                        # the dict, which later crashes JSON serialization
+                        # in the MCP layer with a MockValSer error.
+                        metadata = response.model_dump(mode='json', exclude_none=True)
+                    elif hasattr(response, 'to_dict'):
+                        # Legacy SDK (google.generativeai)
                         metadata = response.to_dict()
                     elif hasattr(response, '__dict__'):
                         # Fallback: serialize all attributes
@@ -131,13 +141,23 @@ class GeminiProvider(BaseProvider):
                             if not key.startswith('_'):
                                 try:
                                     # Try to serialize value
-                                    if hasattr(value, 'to_dict'):
+                                    if hasattr(value, 'model_dump'):
+                                        raw_dict[key] = value.model_dump(mode='json')
+                                    elif hasattr(value, 'to_dict'):
                                         raw_dict[key] = value.to_dict()
+                                    elif isinstance(value, (list, tuple)):
+                                        raw_dict[key] = [
+                                            item.model_dump(mode='json') if hasattr(item, 'model_dump')
+                                            else item.to_dict() if hasattr(item, 'to_dict')
+                                            else str(item) if hasattr(item, '__dict__')
+                                            else item
+                                            for item in value
+                                        ]
                                     elif hasattr(value, '__dict__'):
                                         raw_dict[key] = str(value)
                                     else:
                                         raw_dict[key] = value
-                                except:
+                                except Exception:
                                     raw_dict[key] = str(value)
                         metadata = raw_dict
                 except Exception:

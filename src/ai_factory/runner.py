@@ -2,6 +2,7 @@
 Main runner for ai-factory
 """
 import time
+from dataclasses import replace
 from .config import Config
 from .result import RunResult, ModelInfo, EmbedResult
 from .metrics import build_metrics
@@ -49,7 +50,12 @@ def run(prompt: str, config: Config) -> RunResult:
         
         # Call provider (retry logic is internal to provider)
         response = provider.call(prompt)
-        
+
+        # A provider may settle the model itself (local: the id the server
+        # lists when none was named); price and record that, not the request.
+        if provider.config.model != config.model:
+            config = replace(config, model=provider.config.model)
+
         # Calculate metrics
         end_time = time.time()
         latency_ms = max(1, int((end_time - start_time) * 1000))
@@ -79,7 +85,8 @@ def run(prompt: str, config: Config) -> RunResult:
         return RunResult(
             output=output,
             success=success,
-            metrics=metrics
+            metrics=metrics,
+            error=response.error
         )
     
     except Exception as e:
@@ -97,7 +104,8 @@ def run(prompt: str, config: Config) -> RunResult:
         return RunResult(
             output="",
             success=False,
-            metrics=metrics
+            metrics=metrics,
+            error=f"{type(e).__name__}: {str(e)}"
         )
 
 
@@ -116,17 +124,12 @@ def list_models(provider_name: str, config: Config) -> list[ModelInfo]:
     """
     # Create a config copy with the specified provider
     # (We don't modify the original config)
-    provider_config = Config(
+    # replace() keeps base_url and the rest, so a listing asks the same
+    # server a run would.
+    provider_config = replace(
+        config,
         provider=provider_name,
-        model=config.model,
-        max_retries=config.max_retries,
-        backoff_base_ms=config.backoff_base_ms,
-        backoff_multiplier=config.backoff_multiplier,
         ledger_enabled=False,  # Model listing doesn't log
-        ledger_path=config.ledger_path,
-        capture_prompt=config.capture_prompt,
-        capture_output=config.capture_output,
-        capture_limit_chars=config.capture_limit_chars,
     )
     
     provider = get_provider(provider_name, provider_config)

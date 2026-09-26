@@ -52,11 +52,29 @@ def run_prompt(
     ledger_path: Optional[str] = None,
     ledger_format: Optional[str] = None,
     base_url: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    timeout_s: Optional[float] = None,
+    thinking: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Execute a single prompt via the configured (or specified) provider/model.
 
-    Returns the model output, success flag, and full metrics. The call is
-    recorded to the ai-factory ledger unless `ledger_enabled=False`.
+    Returns the model output, success flag, `error` (why, when success is
+    false), and full metrics. The call is recorded to the ai-factory ledger
+    unless `ledger_enabled=False`.
+
+    For routine prompts - summarise, classify, extract, reformat, short
+    rewrites - pass `provider="local"`: a model on the local GPU, $0 in the
+    ledger. It needs no `model` (the server's own model is used and recorded)
+    and fails fast with "local server not reachable" when the server is down.
+    Keep frontier providers for reasoning-heavy work.
+
+    `base_url`: OpenAI-compatible endpoint for the openai and local providers
+    (local defaults to http://localhost:8089/v1).
+    `temperature`, `max_tokens`: passthrough for anthropic, openrouter, openai
+    and local; other providers use their SDK default.
+    `timeout_s`: per-request timeout for openai and local.
+    `thinking`: local only; off by default so max_tokens goes to the answer.
     """
     overrides = _drop_none({
         "provider": provider,
@@ -67,6 +85,10 @@ def run_prompt(
         "ledger_enabled": ledger_enabled,
         "ledger_path": ledger_path,
         "ledger_format": ledger_format,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout_s": timeout_s,
+        "thinking": thinking,
     })
     config = load_config(**overrides)
     if base_url is not None:
@@ -75,11 +97,11 @@ def run_prompt(
 
 
 @mcp.tool()
-def list_models(provider: Optional[str] = None) -> dict[str, Any]:
+def list_models(provider: Optional[str] = None, base_url: Optional[str] = None) -> dict[str, Any]:
     """List available models for a provider.
 
-    If `provider` is omitted, uses the configured default. Does not write to
-    the ledger.
+    If `provider` is omitted, uses the configured default. `provider="local"`
+    reads the local server's /v1/models. Does not write to the ledger.
     """
     overrides = _drop_none({"provider": provider})
     if "provider" not in overrides:
@@ -90,6 +112,8 @@ def list_models(provider: Optional[str] = None) -> dict[str, Any]:
         # placeholder since list_models() ignores it.
         config = load_config(provider=overrides["provider"], model="unused")
         provider_name = overrides["provider"]
+    if base_url is not None:
+        config = replace(config, base_url=base_url)
     models = _list_models(provider_name, config)
     return {"provider": provider_name, "models": [asdict(m) for m in models]}
 

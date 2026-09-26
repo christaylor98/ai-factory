@@ -95,6 +95,7 @@ class RunResult:
     output: str
     success: bool
     metrics: Metrics
+    error: Optional[str] = None
 
 
 @dataclass

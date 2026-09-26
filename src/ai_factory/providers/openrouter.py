@@ -118,12 +118,17 @@ class OpenRouterProvider(BaseProvider):
             
             try:
                 # Make the API call
-                response = self.client.chat.completions.create(
-                    model=self.config.model,
-                    messages=[
+                create_kwargs = {
+                    "model": self.config.model,
+                    "messages": [
                         {"role": "user", "content": prompt}
-                    ]
-                )
+                    ],
+                }
+                if self.config.temperature is not None:
+                    create_kwargs["temperature"] = self.config.temperature
+                if self.config.max_tokens is not None:
+                    create_kwargs["max_tokens"] = self.config.max_tokens
+                response = self.client.chat.completions.create(**create_kwargs)
                 
                 # Extract text from first choice
                 text = ""

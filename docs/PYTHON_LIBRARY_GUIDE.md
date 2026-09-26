@@ -8,6 +8,7 @@ Complete guide for integrating AI Factory as a Python library in your applicatio
 - [Quick Start](#quick-start)
 - [Configuration Methods](#configuration-methods)
 - [Core Operations](#core-operations)
+- [Embedding Support](#embedding-support)
 - [Provider-Specific Examples](#provider-specific-examples)
 - [Error Handling](#error-handling)
 - [Ledger Integration](#ledger-integration)
@@ -269,6 +270,316 @@ if result.retry_history:
 
 ---
 
+## Embedding Support
+
+AI Factory supports generating text embeddings through supported providers. Embeddings are vector representations of text that can be used for semantic search, clustering, and similarity comparisons.
+
+### Supported Providers
+
+- ✅ **OpenAI**: Uses `text-embedding-3-small` or `text-embedding-3-large` models
+- ✅ **Google Gemini**: Uses `gemini-embedding-001` model (3072-dimensional)
+- ✅ **Stub**: Returns deterministic 8-dimensional zero vector for testing
+- ❌ **Anthropic**: Not supported (returns error)
+- ❌ **OpenRouter**: Not supported (returns error)
+- ❌ **Copilot CLI**: Not supported (returns error)
+
+### Basic Embedding Usage
+
+```python
+from ai_factory import embed, Config
+
+# Configure for OpenAI embeddings
+config = Config(
+    provider="openai",
+    model="text-embedding-3-small",
+    ledger_enabled=False,
+)
+
+# Generate embedding
+result = embed("Hello, world!", config)
+
+if result.success:
+    print(f"Vector dimension: {len(result.vector)}")
+    print(f"First 5 values: {result.vector[:5]}")
+    print(f"Latency: {result.metrics.latency_ms}ms")
+else:
+    print(f"Error: {result.error}")
+```
+
+### Using Gemini for Embeddings
+
+```python
+from ai_factory import embed, Config
+
+config = Config(
+    provider="gemini",
+    model="gemini-embedding-001",  # 3072-dimensional embeddings
+)
+
+result = embed("Artificial intelligence and machine learning", config)
+
+if result.success:
+    print(f"Generated {len(result.vector)}-dimensional embedding")
+    # Gemini gemini-embedding-001 produces 3072-dimensional embeddings
+```
+
+### EmbedResult Structure
+
+```python
+from ai_factory import embed, Config
+
+config = Config(provider="openai", model="text-embedding-3-small")
+result = embed("Sample text", config)
+
+# Access result fields
+print(f"Vector: {result.vector}")              # list[float]
+print(f"Success: {result.success}")            # bool
+print(f"Error: {result.error}")                # Optional[str]
+print(f"Metrics: {result.metrics}")           # Metrics object
+
+# Access metrics
+print(f"Input chars: {result.metrics.input_chars}")
+print(f"Latency: {result.metrics.latency_ms}ms")
+print(f"Success: {result.metrics.success}")
+```
+
+### Embedding with Ledger
+
+Embeddings are automatically logged to the ledger when enabled. The ledger records metadata but does **not** store the full vector or raw input text for efficiency.
+
+```python
+from ai_factory import embed, Config
+
+config = Config(
+    provider="openai",
+    model="text-embedding-3-small",
+    ledger_enabled=True,
+    ledger_path="./embeddings.is",
+)
+
+result = embed("Document content to embed", config)
+
+# Ledger entry includes:
+# - Timestamp
+# - Provider and model
+# - Input character count
+# - Vector dimension
+# - Latency
+# - Success status
+# - SHA256 hash of input (for reproducibility verification)
+```
+
+**Example ledger entry (IS format):**
+```lisp
+(embed
+  (timestamp "2026-02-22T19:52:41.915984Z")
+  (provider "gemini")
+  (model "gemini-embedding-001")
+  (input_chars 26)
+  (vector_dim 3072)
+  (latency_ms 145)
+  (success true)
+  (input_hash "06ffc5c5745c814e9bae12e67691e0891d17a2ac04e5b390c3db59e0856204cb")
+)
+```
+
+**Example ledger entry (JSON format):**
+```json
+{
+  "type": "embed",
+  "timestamp": "2026-02-22T19:52:41.917236Z",
+  "provider": "gemini",
+  "model": "gemini-embedding-001",
+  "input_chars": 26,
+  "vector_dim": 3072,
+  "latency_ms": 145,
+  "success": true,
+  "input_hash": "06ffc5c5745c814e9bae12e67691e0891d17a2ac04e5b390c3db59e0856204cb"
+}
+```
+
+### CLI Usage for Embeddings
+
+```bash
+# Embed text directly
+ai_factory embed --provider openai --model text-embedding-3-small --text "Hello world"
+
+# Or using Python module syntax
+python -m ai_factory.cli embed --provider openai --model text-embedding-3-small --text "Your text"
+
+# Read text from a file
+ai_factory embed --provider gemini --model models/embedding-001 --text-file input.txt
+
+# Save vector to file
+ai_factory embed --provider openai --text "Sample" --output vector.json
+
+# With ledger enabled (default)
+ai_factory embed --provider openai --text "Test" --ledger-path embeddings.is
+
+# Without ledger
+ai_factory embed --provider openai --text "Test" --no-ledger
+```
+
+### Batch Embedding Example
+
+```python
+from ai_factory import embed, Config
+import json
+
+def embed_documents(documents: list[str], output_file: str = "embeddings.json"):
+    """Generate embeddings for multiple documents."""
+    config = Config(
+        provider="openai",
+        model="text-embedding-3-small",
+        ledger_enabled=True,
+        ledger_path="./batch-embeddings.is",
+    )
+    
+    embeddings = []
+    
+    for i, doc in enumerate(documents, 1):
+        print(f"Processing document {i}/{len(documents)}...")
+        result = embed(doc, config)
+        
+        if result.success:
+            embeddings.append({
+                "text": doc,
+                "vector": result.vector,
+                "dimension": len(result.vector),
+                "latency_ms": result.metrics.latency_ms,
+            })
+        else:
+            print(f"Failed to embed document {i}: {result.error}")
+    
+    # Save to file
+    with open(output_file, 'w') as f:
+        json.dump(embeddings, f, indent=2)
+    
+    print(f"Saved {len(embeddings)} embeddings to {output_file}")
+    return embeddings
+
+# Use it
+documents = [
+    "Machine learning is a subset of artificial intelligence.",
+    "Deep learning uses neural networks with multiple layers.",
+    "Natural language processing enables computers to understand text.",
+]
+
+embeddings = embed_documents(documents)
+```
+
+### Semantic Similarity Example
+
+```python
+from ai_factory import embed, Config
+import numpy as np
+
+def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    """Calculate cosine similarity between two vectors."""
+    v1 = np.array(vec1)
+    v2 = np.array(vec2)
+    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+def find_similar_texts(query: str, corpus: list[str], top_k: int = 3):
+    """Find most similar texts to the query using embeddings."""
+    config = Config(
+        provider="openai",
+        model="text-embedding-3-small",
+        ledger_enabled=False,
+    )
+    
+    # Embed query
+    query_result = embed(query, config)
+    if not query_result.success:
+        print(f"Failed to embed query: {query_result.error}")
+        return []
+    
+    # Embed corpus
+    similarities = []
+    for text in corpus:
+        result = embed(text, config)
+        if result.success:
+            similarity = cosine_similarity(query_result.vector, result.vector)
+            similarities.append((text, similarity))
+    
+    # Sort by similarity
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    
+    return similarities[:top_k]
+
+# Use it
+query = "How do neural networks work?"
+corpus = [
+    "Neural networks are inspired by biological neurons.",
+    "Python is a popular programming language.",
+    "Deep learning models require large datasets.",
+    "The weather today is sunny and warm.",
+    "Backpropagation is used to train neural networks.",
+]
+
+results = find_similar_texts(query, corpus, top_k=3)
+
+print(f"Query: {query}\n")
+for text, score in results:
+    print(f"Similarity: {score:.4f} - {text}")
+```
+
+### Testing with Stub Provider
+
+```python
+from ai_factory import embed, Config
+
+def test_embedding_logic():
+    """Test your embedding logic without API calls."""
+    config = Config(
+        provider="stub",
+        model="stub-1",
+        ledger_enabled=False,
+    )
+    
+    result = embed("Test text", config)
+    
+    # Stub provider returns deterministic zero vector
+    assert result.success
+    assert len(result.vector) == 8  # Stub returns 8-dimensional vector
+    assert result.vector == [0.0] * 8
+    assert result.error is None
+    print("✓ Embedding test passed")
+
+test_embedding_logic()
+```
+
+### Error Handling for Embeddings
+
+```python
+from ai_factory import embed, Config
+
+config = Config(
+    provider="anthropic",  # Anthropic doesn't support embeddings
+    model="claude-3-5-sonnet-20241022",
+)
+
+result = embed("Some text", config)
+
+if not result.success:
+    print(f"Embedding failed: {result.error}")
+    # Output: "Anthropic provider does not support embedding generation"
+    
+    # Vector will be empty on failure
+    assert result.vector == []
+```
+
+### Key Differences from run()
+
+1. **Separate operation**: `embed()` is independent from `run()` - no shared state
+2. **No prompt scaffolding**: Direct text-to-vector conversion
+3. **Different ledger entry**: Uses `type="embed"` instead of `type="run"`
+4. **No retry logic**: Currently embeddings don't retry on failure (future enhancement)
+5. **Synchronous only**: No background processing or caching
+6. **Deterministic**: Same input always produces same vector (per provider/model)
+
+---
+
 ## Provider-Specific Examples
 
 ### OpenAI
@@ -358,6 +669,44 @@ config = Config(
 )
 
 result = run("How do I list files in a directory?", config)
+print(result.output)
+```
+
+### Local server (llama-server, ollama /v1)
+
+```python
+from ai_factory import run, Config
+
+# No key. model="" uses the one model the server lists, and records it.
+config = Config(provider="local", model="", max_tokens=300)
+
+result = run("Summarise: ...", config)
+if not result.success:
+    print(result.error)  # e.g. "local server not reachable at http://localhost:8089/v1 ..."
+print(result.output, result.metrics.cost_usd)  # cost_usd == 0.0
+```
+
+### Ollama
+
+```python
+from ai_factory import run, Config
+
+# Requires `ollama serve`; see docs/OLLAMA_PROVIDER.md
+config = Config(provider="ollama", model="llama3.2")
+
+result = run("Why is the sky blue?", config)
+print(result.output)
+```
+
+### Claude Code
+
+```python
+from ai_factory import run, Config
+
+# Uses the authenticated `claude` CLI; model is an alias or full model id
+config = Config(provider="claude_code", model="haiku")
+
+result = run("Name three sorting algorithms.", config)
 print(result.output)
 ```
 
@@ -959,6 +1308,9 @@ config = Config(
 - `gemini`: Google Gemini models
 - `openrouter`: OpenRouter (multi-model gateway)
 - `copilot_cli`: GitHub Copilot CLI
+- `local`: OpenAI-compatible local server (llama-server, ollama `/v1`)
+- `ollama`: Ollama native API
+- `claude_code`: the `claude` CLI (`claude -p`)
 - `stub`: Testing provider
 
 ---

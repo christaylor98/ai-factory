@@ -219,7 +219,7 @@ def build_metrics(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         cost_usd=cost_usd,
-        finish_reason=optional_fields.get("finish_reason"),
+        finish_reason=optional_fields.get("finish_reason", (metadata or {}).get("finish_reason")),
         provider_metadata=metadata,
         cache_creation_input_tokens=cache_creation,
         cache_read_input_tokens=cache_read,

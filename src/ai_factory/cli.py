@@ -43,10 +43,12 @@ def cmd_run(args) -> int:
     metrics = result.metrics
     print(f"\n--- Metrics ---", file=sys.stderr)
     print(f"Success: {metrics.success}", file=sys.stderr)
+    if result.error:
+        print(f"Error: {result.error}", file=sys.stderr)
     print(f"Input chars: {metrics.input_chars}", file=sys.stderr)
     print(f"Output chars: {metrics.output_chars}", file=sys.stderr)
     print(f"Latency: {metrics.latency_ms}ms", file=sys.stderr)
-    
+
     return 0 if result.success else 1
 
 

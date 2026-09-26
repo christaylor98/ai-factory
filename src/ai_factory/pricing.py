@@ -380,7 +380,7 @@ def resolve_price(
         drawn from a stale table is returned with source
         ``pricing_table_stale`` rather than withheld.
     """
-    if provider == "ollama":
+    if provider in ("ollama", "local"):
         # Local inference: no marginal cost. A fact, not a lookup.
         return ModelPrice(0.0, 0.0, 0.0, 0.0, source=SOURCE_PROVIDER_API)
 

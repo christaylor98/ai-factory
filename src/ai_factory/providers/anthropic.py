@@ -101,13 +101,16 @@ class AnthropicProvider(BaseProvider):
             
             try:
                 # Make the API call using messages API
-                response = self.client.messages.create(
-                    model=self.config.model,
-                    max_tokens=4096,  # Required parameter for Anthropic
-                    messages=[
+                create_kwargs = {
+                    "model": self.config.model,
+                    "max_tokens": self.config.max_tokens or 4096,  # Required parameter for Anthropic
+                    "messages": [
                         {"role": "user", "content": prompt}
-                    ]
-                )
+                    ],
+                }
+                if self.config.temperature is not None:
+                    create_kwargs["temperature"] = self.config.temperature
+                response = self.client.messages.create(**create_kwargs)
                 
                 # Extract text from content blocks
                 text = ""

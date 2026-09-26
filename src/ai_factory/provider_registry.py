@@ -27,6 +27,13 @@ try:
 except ImportError:
     _has_openai = False
 
+# Import local (OpenAI-compatible server) provider if available
+try:
+    from .providers.local import LocalProvider
+    _has_local = True
+except ImportError:
+    _has_local = False
+
 # Import Anthropic provider if available
 try:
     from .providers.anthropic import AnthropicProvider
@@ -40,6 +47,23 @@ try:
     _has_copilot_cli = True
 except ImportError:
     _has_copilot_cli = False
+
+
+# Ollama provider (no external dependencies)
+try:
+    from .providers.ollama import OllamaProvider
+    _has_ollama = True
+except ImportError:
+    _has_ollama = False
+
+# Import Claude Code provider if available (shells out to the `claude` CLI;
+# no extra package dependency, but keep the same optional-registration
+# pattern as the other providers)
+try:
+    from .providers.claude_code import ClaudeCodeProvider
+    _has_claude_code = True
+except ImportError:
+    _has_claude_code = False
 
 
 # Registry of available providers
@@ -58,6 +82,18 @@ if _has_openrouter:
 # Register OpenAI if available
 if _has_openai:
     _PROVIDER_REGISTRY["openai"] = OpenAIProvider
+
+# Register Ollama if available
+if _has_ollama:
+    _PROVIDER_REGISTRY["ollama"] = OllamaProvider
+
+# Register Claude Code if available
+if _has_claude_code:
+    _PROVIDER_REGISTRY["claude_code"] = ClaudeCodeProvider
+
+# Register local if available
+if _has_local:
+    _PROVIDER_REGISTRY["local"] = LocalProvider
 
 # Register Anthropic if available
 if _has_anthropic:

@@ -41,8 +41,54 @@ class OpenAIProvider(BaseProvider):
                 "Either set it directly or add it to your .env file."
             )
         
-        # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key)
+        # base_url points the SDK at any OpenAI-compatible server. Dropping it
+        # silently sends the call, and the bill, to api.openai.com.
+        self.client = OpenAI(**self._client_kwargs(self.api_key))
+
+    def _client_kwargs(self, api_key: str) -> dict:
+        """Constructor arguments for the OpenAI client."""
+        kwargs = {"api_key": api_key}
+        if self.config.base_url:
+            kwargs["base_url"] = self.config.base_url
+        if self.config.timeout_s is not None:
+            kwargs["timeout"] = self.config.timeout_s
+        return kwargs
+
+    def _create_kwargs(self, prompt: str) -> dict:
+        """Arguments for chat.completions.create."""
+        kwargs = {
+            "model": self.config.model,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+        }
+        if self.config.temperature is not None:
+            kwargs["temperature"] = self.config.temperature
+        if self.config.max_tokens is not None:
+            kwargs["max_tokens"] = self.config.max_tokens
+        return kwargs
+
+    def _empty_output_error(self, response, text: str) -> Optional[str]:
+        """
+        Why an empty answer is a failure, or None when the answer is not empty.
+
+        An empty string with success=True reads as "the model had nothing to
+        say" when the budget actually ran out.
+        """
+        if text:
+            return None
+        choice = response.choices[0] if response.choices else None
+        message = getattr(choice, "message", None)
+        reasoning = getattr(message, "reasoning_content", None) if message else None
+        if reasoning:
+            return "reasoning exhausted max_tokens"
+        if getattr(choice, "finish_reason", None) == "length":
+            return "output truncated at max_tokens before any content"
+        return "empty response"
+
+    def _describe_error(self, error: Exception) -> str:
+        """Error text recorded for a failed call."""
+        return f"{type(error).__name__}: {str(error)}"
     
     def _is_retryable_error(self, error: Exception) -> bool:
         """Check if an error is retryable."""
@@ -101,10 +147,7 @@ class OpenAIProvider(BaseProvider):
             try:
                 # Make the API call
                 response = self.client.chat.completions.create(
-                    model=self.config.model,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
+                    **self._create_kwargs(prompt)
                 )
                 
                 # Extract text from first choice
@@ -147,13 +190,13 @@ class OpenAIProvider(BaseProvider):
                     if hasattr(choice, 'finish_reason') and choice.finish_reason:
                         metadata['finish_reason'] = choice.finish_reason
                 
-                # Success
+                # Usage is kept on an empty answer too: those tokens were spent.
                 return ProviderResponse(
                     text=text,
                     metadata=metadata,
                     attempts=attempts,
                     retry_history=retry_history,
-                    error=None
+                    error=self._empty_output_error(response, text)
                 )
             
             except Exception as e:
@@ -187,7 +230,7 @@ class OpenAIProvider(BaseProvider):
                         metadata={},
                         attempts=attempts,
                         retry_history=retry_history,
-                        error=f"{error_type}: {error_message}"
+                        error=self._describe_error(e)
                     )
         
         # Should never reach here, but just in case

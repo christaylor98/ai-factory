@@ -25,6 +25,11 @@ except ImportError:
     pass
 
 try:
+    from .ollama import OllamaProvider
+except ImportError:
+    pass
+
+try:
     from .copilot_cli import CopilotCLIProvider
 except ImportError:
     pass

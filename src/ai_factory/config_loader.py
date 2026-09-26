@@ -91,7 +91,25 @@ def _env_to_config_dict() -> Dict[str, Any]:
             config["capture_limit_chars"] = int(os.environ["AIFACTORY_CAPTURE_LIMIT_CHARS"])
         except ValueError:
             pass
-    
+    if "AIFACTORY_TEMPERATURE" in os.environ:
+        try:
+            config["temperature"] = float(os.environ["AIFACTORY_TEMPERATURE"])
+        except ValueError:
+            pass
+    if "AIFACTORY_MAX_TOKENS" in os.environ:
+        try:
+            config["max_tokens"] = int(os.environ["AIFACTORY_MAX_TOKENS"])
+        except ValueError:
+            pass
+    if "AIFACTORY_TIMEOUT_S" in os.environ:
+        try:
+            config["timeout_s"] = float(os.environ["AIFACTORY_TIMEOUT_S"])
+        except ValueError:
+            pass
+    if "AIFACTORY_THINKING" in os.environ:
+        value = os.environ["AIFACTORY_THINKING"].lower()
+        config["thinking"] = value in ("true", "1", "yes")
+
     return config
 
 
@@ -157,6 +175,23 @@ def _flatten_config(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _apply_local_section(config_dict: Dict[str, Any], section: Dict[str, Any], model: Optional[str]) -> None:
+    """
+    Settle model, base_url and thinking for the local provider.
+
+    The model comes only from the call or the [local] section. A model from
+    [default] or AIFACTORY_MODEL names the default provider's model (say
+    gemini-2.5-flash); sent to llama-server it is ignored, and the ledger
+    would record a model that never ran. An empty model tells the provider
+    to use the one the server lists.
+    """
+    config_dict["model"] = model if model is not None else section.get("model", "")
+    if "base_url" in section and not config_dict.get("base_url"):
+        config_dict["base_url"] = section["base_url"]
+    if "thinking" in section and "thinking" not in config_dict:
+        config_dict["thinking"] = bool(section["thinking"])
+
+
 def load_config(
     provider: Optional[str] = None,
     model: Optional[str] = None,
@@ -169,6 +204,10 @@ def load_config(
     capture_prompt: Optional[bool] = None,
     capture_output: Optional[bool] = None,
     capture_limit_chars: Optional[int] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    timeout_s: Optional[float] = None,
+    thinking: Optional[bool] = None,
 ) -> Config:
     """
     Load configuration with proper precedence.
@@ -187,15 +226,18 @@ def load_config(
     }
     
     global_config_path = Path.home() / ".aifactory" / "config.toml"
+    provider_configs: Dict[str, Any] = {}
     global_toml = _load_toml_file(global_config_path)
     if global_toml:
         global_flat = _flatten_config(global_toml)
+        provider_configs = _merge_config(provider_configs, global_flat.pop("_provider_configs", {}))
         config_dict.update(global_flat)
     
     local_config_path = Path.cwd() / "aifactory.toml"
     local_toml = _load_toml_file(local_config_path)
     if local_toml:
         local_flat = _flatten_config(local_toml)
+        provider_configs = _merge_config(provider_configs, local_flat.pop("_provider_configs", {}))
         config_dict.update(local_flat)
     
     env_config = _env_to_config_dict()
@@ -223,8 +265,17 @@ def load_config(
         config_dict["capture_output"] = capture_output
     if capture_limit_chars is not None:
         config_dict["capture_limit_chars"] = capture_limit_chars
-    
-    config_dict.pop("_provider_configs", None)
+    if temperature is not None:
+        config_dict["temperature"] = temperature
+    if max_tokens is not None:
+        config_dict["max_tokens"] = max_tokens
+    if timeout_s is not None:
+        config_dict["timeout_s"] = timeout_s
+    if thinking is not None:
+        config_dict["thinking"] = thinking
+
+    if config_dict.get("provider") == "local":
+        _apply_local_section(config_dict, provider_configs.get("local", {}), model)
     
     if config_dict.get("ledger_format") == "json" and config_dict.get("ledger_path") == "./LEDGER.is":
         config_dict["ledger_path"] = "./LEDGER.jsonl"
