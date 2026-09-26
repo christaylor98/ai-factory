@@ -85,6 +85,26 @@ def run_tests(work: Path, tests: str, timeout: float = 90) -> bool:
         os.killpg(p.pid, signal.SIGKILL)
         p.wait()
         return False
+    finally:
+        reap(work)
+
+
+def reap(work: Path) -> None:
+    """Kill anything still running from the temporary copy: a fake `claude` runs in its own process group (the
+    agent starts it that way), so a mutation that breaks cancel leaves it behind otherwise. Linux: /proc."""
+    import os
+    import signal
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return
+    for d in proc.iterdir():
+        if not d.name.isdigit() or int(d.name) == os.getpid():
+            continue
+        try:
+            if str(work).encode() in (d / "cmdline").read_bytes():
+                os.kill(int(d.name), signal.SIGKILL)
+        except (OSError, ValueError):
+            continue
 
 
 def main() -> int:
