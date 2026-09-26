@@ -6,6 +6,8 @@ Public API:
     - list_models(provider_name, config) -> list[ModelInfo]
     - Config (configuration dataclass)
     - load_env() -> bool: read a .env file into the environment (opt-in)
+    - start_agent(AgentSpec, config) -> AgentRun: a streamed, steerable agent run on `claude -p`
+      (ai_factory.agent; imported only when used)
 
 Importing ai_factory changes nothing in os.environ. Up to 1.0 it loaded a .env on import, which put any
 ANTHROPIC_API_KEY found up the tree into the importing process -- and into every subprocess it started, which
@@ -29,4 +31,13 @@ __all__ = [
     "EmbedResult",
     "append_event",
     "load_env",
+    "start_agent",
+    "AgentSpec",
 ]
+
+
+def __getattr__(name):   # the agent module loads on first use, so a single-prompt user never pays for it
+    if name in ("start_agent", "AgentSpec", "AgentRun", "AgentResult", "AgentRunError", "ToolPolicyError", "Inbox"):
+        from . import agent
+        return getattr(agent, name)
+    raise AttributeError(f"module 'ai_factory' has no attribute {name!r}")
