@@ -48,6 +48,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]   # the checkout under test, not whatever copy is pip-installed
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

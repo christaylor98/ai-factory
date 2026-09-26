@@ -37,7 +37,9 @@ output_per_1m = 2.5
 """
 
 
-def write_table(tmp_path, fetched_at="2026-08-30", body=None):
+def write_table(tmp_path, fetched_at=None, body=None):
+    # Fresh unless a test says otherwise: a fixed date here turned stale on its own (2026-09-27).
+    fetched_at = fetched_at or date.today().isoformat()
     path = tmp_path / "pricing.toml"
     path.write_text(body if body is not None else TABLE.format(fetched_at=fetched_at))
     return str(path)
