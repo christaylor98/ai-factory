@@ -74,9 +74,10 @@ class ModelPrice:
 
     input_per_1m: float
     output_per_1m: float
-    cache_write_per_1m: Optional[float] = None
+    cache_write_per_1m: Optional[float] = None      # a 5-minute cache write (Anthropic: 1.25x input)
     cache_read_per_1m: Optional[float] = None
     source: str = SOURCE_TABLE
+    cache_write_1h_per_1m: Optional[float] = None   # a 1-hour cache write (Anthropic: 2x input)
 
 
 @dataclass(frozen=True)
@@ -205,6 +206,10 @@ def load_pricing_table(path: Optional[str] = None) -> PricingTable:
                         if "cache_read_per_1m" in fields else None
                     ),
                     source=SOURCE_TABLE,
+                    cache_write_1h_per_1m=(
+                        float(fields["cache_write_1h_per_1m"])
+                        if "cache_write_1h_per_1m" in fields else None
+                    ),
                 )
             except (TypeError, ValueError):
                 continue
@@ -309,6 +314,8 @@ def _format_toml(rows: Dict[Tuple[str, str], ModelPrice], today: date) -> str:
             lines.append(f"cache_write_per_1m = {price.cache_write_per_1m:g}")
         if price.cache_read_per_1m is not None:
             lines.append(f"cache_read_per_1m = {price.cache_read_per_1m:g}")
+        if price.cache_write_1h_per_1m is not None:
+            lines.append(f"cache_write_1h_per_1m = {price.cache_write_1h_per_1m:g}")
         lines.append("")
     return "\n".join(lines)
 
@@ -401,5 +408,6 @@ def resolve_price(
             cache_write_per_1m=price.cache_write_per_1m,
             cache_read_per_1m=price.cache_read_per_1m,
             source=SOURCE_TABLE_STALE,
+            cache_write_1h_per_1m=price.cache_write_1h_per_1m,
         )
     return price

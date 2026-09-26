@@ -26,7 +26,44 @@ DEFAULT_CHARS_PER_TOKEN = 4.0
 # Anthropic's published cache multipliers, used only when a price entry
 # omits explicit cache rates. Applying them marks the cost as estimated.
 _CACHE_WRITE_MULTIPLIER = 1.25
+_CACHE_WRITE_1H_MULTIPLIER = 2.0
 _CACHE_READ_MULTIPLIER = 0.10
+
+
+def usage_cost(price, usage: Optional[dict]) -> Tuple[Optional[float], bool]:
+    """
+    Cost in USD of one raw Anthropic-style usage block, as the API bills it: plain input, cache writes split into
+    5-minute and 1-hour (usage["cache_creation"]["ephemeral_5m_input_tokens" / "ephemeral_1h_input_tokens"]; a
+    write with no split is priced as 5-minute), cache reads, and output.
+
+    This is what a live meter needs: `claude -p` streams a usage block per API call but reports dollars only at
+    the end. Checked against a real Sonnet 5 stream: 6 in + 12,888 1h writes + 18,558 reads + 5,319 out at $2/$10
+    = $0.1084656, the segment's own total_cost_usd.
+
+    Returns (cost_usd, used_default_cache_rates); (None, False) without a price or a usage block.
+    """
+    if price is None or not isinstance(usage, dict):
+        return (None, False)
+    n = lambda k, d=usage: int(d.get(k) or 0)
+    split = usage.get("cache_creation") if isinstance(usage.get("cache_creation"), dict) else {}
+    w1h, w5m = n("ephemeral_1h_input_tokens", split), n("ephemeral_5m_input_tokens", split)
+    w5m += max(n("cache_creation_input_tokens") - w1h - w5m, 0)
+    defaulted = False
+
+    def rate(explicit, multiplier, tokens):
+        nonlocal defaulted
+        if not tokens:
+            return 0.0
+        if explicit is None:
+            defaulted = True
+            explicit = price.input_per_1m * multiplier
+        return tokens * explicit
+
+    total = (n("input_tokens") * price.input_per_1m + n("output_tokens") * price.output_per_1m
+             + rate(price.cache_write_per_1m, _CACHE_WRITE_MULTIPLIER, w5m)
+             + rate(getattr(price, "cache_write_1h_per_1m", None), _CACHE_WRITE_1H_MULTIPLIER, w1h)
+             + rate(price.cache_read_per_1m, _CACHE_READ_MULTIPLIER, n("cache_read_input_tokens")))
+    return (total / 1_000_000.0, defaulted)
 
 
 def estimate_tokens(chars: int, chars_per_token: float = DEFAULT_CHARS_PER_TOKEN) -> int:
