@@ -78,6 +78,11 @@ answer = run.wait()             # AgentResult; AgentRunError or ToolPolicyError 
 `run.cancel()` kills its whole process tree. Which tools a run may use is your policy: pass the lists, and a run
 that used any other tool fails. With a `Config`, each run writes one ledger row, tagged, with its usage.
 
+A scheduler running several agents asks `ai_factory.admission.shared().admit(key)` before starting one (and
+`release(key)` after). Every run feeds that gate what the CLI's stream reports (`rate_limit` and `api_retry`
+events): it holds new runs after a 429/529 (backing off), while a plan-usage window is at `usage_cap` or refused
+(until it resets), one at a time while the CLI warns, and per key (`per_key={"local": 1}`). It never stops a run.
+
 ## Quickstart (CLI)
 
 1) Export a provider key (example: Gemini):

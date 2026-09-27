@@ -19,6 +19,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = "src/ai_factory/agent.py"
 T_AGENT = "tests/test_agent.py"
+ADM = "src/ai_factory/admission.py"
+T_ADM = "tests/test_admission.py"
 
 
 @dataclass
@@ -31,6 +33,31 @@ class Mutation:
 
 
 MUTATIONS = [
+    # admission and pacing (axChat CONTROLLER_SPEC A8, 2026-09-27)
+    Mutation("A8: per-key limit ignored", ADM, "if limit is not None and self.running.get(key, 0) >= limit:",
+             "if False:", T_ADM),
+    Mutation("A8: release never frees the slot", ADM, "            n = self.running.get(key, 0) - 1",
+             "            n = self.running.get(key, 0)", T_ADM),
+    Mutation("A8: check takes a slot", ADM,
+             "        with self._lock:\n            return self._decide(key, now)",
+             "        return self.admit(key)", T_ADM),
+    Mutation("A8: back-off does not double", ADM, "self.backoff_base_s * 2 ** (self.streak - 1)",
+             "self.backoff_base_s", T_ADM),
+    Mutation("A8: a response does not end the back-off streak", ADM,
+             '            elif t == "call":\n                self.streak = 0', '            elif t == "call":\n                pass',
+             T_ADM),
+    Mutation("A8: any retry backs off, not only 429/529", ADM,
+             'elif t == "api_retry" and event.get("status") in RETRY_STATUSES:', 'elif t == "api_retry":', T_ADM),
+    Mutation("A8: usage cap never holds", ADM, "if w.utilization >= self.usage_cap:", "if False:", T_ADM),
+    Mutation("A8: a reset window still holds", ADM,
+             "            if w.resets_at and w.resets_at <= now:\n                continue",
+             "            if False:\n                continue", T_ADM),
+    Mutation("A8: a refusal is ignored", ADM, 'if w.status == "rejected":', "if False:", T_ADM),
+    Mutation("A8: a warning does not mean one at a time", ADM, "if warned and n >= 1:", "if False:", T_ADM),
+    Mutation("A8: the stream's rate limit is not reported", AGENT,
+             'elif msg.get("type") == "rate_limit_event":', 'elif msg.get("type") == "rate_limit_event_":', T_ADM),
+    Mutation("A8: runs do not feed the shared gate", AGENT, "            admission.shared().observe(event)",
+             "            pass", T_ADM),
     # agent runs (lifted from axChat 2026-09-27; the K-numbers are axChat's TUI_REQUIREMENTS)
     Mutation("steer: delivery never reported", AGENT,
              'self.emit({"type": "steer_echo", "uid": uid, "after_calls": self.inbox.calls})', "pass", T_AGENT),

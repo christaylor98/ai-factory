@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
+from . import admission
 from .config import Config
 from .ledger import write_run_to_ledger
 from .metrics import build_metrics
@@ -300,6 +301,15 @@ class StreamParser:
                     call.update(summarise_result(block))
                     self.emit({"type": "tool_result", "id": block["tool_use_id"], "tool": call["tool"],
                                **{k: call[k] for k in ("result_chars", "result_error", "result_empty", "result_preview")}})
+        elif msg.get("type") == "rate_limit_event":   # plan usage, as the CLI sees it (admission.py paces on it)
+            info = msg.get("rate_limit_info") or {}
+            self.emit({"type": "rate_limit", "status": info.get("status", ""), "window": info.get("rateLimitType", ""),
+                       "resets_at": info.get("resetsAt") or 0,
+                       "windows": {k: {"utilization": w.get("utilization") or 0.0, "resets_at": w.get("resetsAt") or 0}
+                                   for k, w in (info.get("unifiedWindows") or {}).items() if isinstance(w, dict)}})
+        elif msg.get("type") == "system" and msg.get("subtype") == "api_retry":   # the CLI retrying a failed call
+            self.emit({"type": "api_retry", "attempt": msg.get("attempt"), "status": msg.get("error_status"),
+                       "error": msg.get("error", ""), "delay_ms": msg.get("retry_delay_ms")})
         elif msg.get("type") == "result":
             self.results.append(msg)
             self.result = merged_result(self.results)
@@ -465,6 +475,8 @@ class AgentRun:
 
     # --- the run itself ------------------------------------------------------------------------------------
     def _emit(self, event: dict) -> None:
+        if event["type"] in ("rate_limit", "api_retry", "call"):   # what admission paces on (A8)
+            admission.shared().observe(event)
         self._events.put(event)
 
     def _run(self) -> None:
