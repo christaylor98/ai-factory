@@ -16,6 +16,9 @@ Single-prompt `run()` is the first and simplest entry point, and adding agent ru
 and cancelled, and writes one ledger row. It starts one process and reports what happened. Deciding what to do
 next stays with the caller, so it is not a workflow engine.
 
+`admission` (admission.py, since 1.2) answers whether one more agent run may start now -- concurrency, back-off
+after a 429/529, plan usage -- from what the runs' streams report. It never stops a run; the scheduler is the caller's.
+
 It is **not**:
 
 * A workflow engine
