@@ -226,6 +226,11 @@ def summarise_result(block: dict) -> dict:
     }
 
 
+def never_ran(call: dict) -> bool:
+    """The CLI refused the call itself: the tool doesn't exist in this run, so it did nothing."""
+    return bool(call.get("result_error")) and "No such tool available" in call.get("result_preview", "")[:200]
+
+
 def merged_result(results: list[dict]) -> dict:
     """A run's answer from its results (several when a late steer ran as a further turn): the last one with a
     structured output (else the last), with `usage` summed over all of them -- each result's usage is its own
@@ -569,7 +574,9 @@ class AgentRun:
             wall_ms=wall_ms)
         if spec.enforce_allowed:
             allowed = set(spec.tools) | set(spec.allowed_tools) | HARNESS_TOOLS
-            off = sorted({c["tool"] for c in parser.tool_calls} - allowed)
+            # a call the CLI answered "No such tool available" never ran: nothing to stop (2026-09-29, axChat: with
+            # tools loaded on demand, a model called bare `run` before ToolSearch, and the fail-stop killed its segment)
+            off = sorted({c["tool"] for c in parser.tool_calls if not never_ran(c)} - allowed)
             if off:
                 raise ToolPolicyError(f"the run used tools outside its allowed set: {off}", off, answer)
         return answer

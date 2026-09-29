@@ -162,6 +162,25 @@ def test_a_tool_outside_the_allowed_set_fails_the_run(fake):
     assert go(kw, enforce_allowed=False).wait().text == "ok"
 
 
+def test_a_call_to_a_tool_that_does_not_exist_never_ran_and_does_not_fail_the_run(fake):
+    refused = {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "t", "is_error": True,
+         "content": "<tool_use_error>Error: No such tool available: run</tool_use_error>"}]}}
+    lines = [assistant("m", usage(1, 1), tool_use("t", "run", {"command": "pytest"})), refused, result(text="ok")]
+    kw, _ = fake(lines)
+    assert go(kw).wait().text == "ok"
+    ran = [assistant("m", usage(1, 1), tool_use("t", "run", {"command": "pytest"})), tool_result("t", "ok"),
+           result(text="ok")]
+    kw, _ = fake(ran)
+    with pytest.raises(ToolPolicyError):          # one that answered (it exists and ran) still fails the run
+        go(kw).wait()
+    failed = {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "t", "is_error": True, "content": "Error: exit 1"}]}}
+    kw, _ = fake([assistant("m", usage(1, 1), tool_use("t", "run", {"command": "pytest"})), failed, result(text="ok")])
+    with pytest.raises(ToolPolicyError):          # it ran and failed: it existed, so it still fails the run
+        go(kw).wait()
+
+
 def test_cancel_kills_the_process_tree_at_once(fake):
     kw, _ = fake(good_stream(), sleep_between=30)
     run = go(kw, schema=ANSWER)
