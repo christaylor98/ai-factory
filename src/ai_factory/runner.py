@@ -80,6 +80,10 @@ def run(prompt: str, config: Config) -> RunResult:
             chars_per_token=config.chars_per_token,
         )
         
+        if metrics.cost_usd:   # what a paid call cost: admission's budgets pace on it
+            from . import admission
+            admission.shared().observe({"type": "spend", "provider": config.provider, "usd": metrics.cost_usd})
+
         # Write to ledger (failures here don't fail the run)
         write_run_to_ledger(
             config=config,

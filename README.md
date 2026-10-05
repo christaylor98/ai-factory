@@ -80,8 +80,10 @@ that used any other tool fails. With a `Config`, each run writes one ledger row,
 
 A scheduler running several agents asks `ai_factory.admission.shared().admit(key)` before starting one (and
 `release(key)` after). Every run feeds that gate what the CLI's stream reports (`rate_limit` and `api_retry`
-events): it holds new runs after a 429/529 (backing off), while a plan-usage window is at `usage_cap` or refused
-(until it resets), one at a time while the CLI warns, and per key (`per_key={"local": 1}`). It never stops a run.
+events): it holds new runs after a 429/529 (backing off), while a plan-usage window is at its cap (`caps`, else
+`usage_cap`) or refused (until it resets), while a `paced` window is ahead of its straight line to the cap (until the
+line catches up; `admit(key, paced=False)` for a person's turn), while an API provider spent its `budgets[provider] =
+(usd, period_s)` (fed by `run`'s priced calls), and per key (`per_key={"local": 1}`). It never stops a run.
 
 ## Quickstart (CLI)
 

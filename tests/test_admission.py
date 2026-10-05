@@ -95,13 +95,62 @@ def test_a_refused_window_holds_everything_until_it_resets():
     assert a.admit("x").ok
 
 
-def test_a_warning_means_one_run_at_a_time():
+def test_a_warning_alone_holds_nothing_the_caps_and_pacing_do():
+    """The CLI warns from 75% of a window: that is not a reason to run fewer at once (axChat bnoobs 2026-10-06: the
+    rate is what is limited, not how many run) -- the cap and the pacing decide."""
     a = Admission(total=4, clock=Clock())
     a.observe(limit("allowed_warning", "seven_day", 9000, seven_day=0.8))
-    assert a.admit("x").ok
-    assert a.admit("y").reason == "warning"
-    a.observe(limit("allowed", "five_hour", 9000, five_hour=0.1, seven_day=0.8))   # the CLI stopped warning
-    assert a.admit("y").ok
+    assert a.admit("x").ok and a.admit("y").ok
+
+
+DAY = 86400
+
+
+def test_a_window_has_its_own_cap():
+    a = Admission(caps={"five_hour": 0.9}, clock=Clock())
+    a.observe(limit("allowed", "five_hour", 5000, five_hour=0.9, seven_day=0.92))
+    d = a.check("x")
+    assert (d.reason, d.until) == ("usage", 5000) and "five_hour usage at 90% (cap 90%)" in d.detail
+    a.observe(limit("allowed", "five_hour", 5000, five_hour=0.89, seven_day=0.92))
+    assert a.check("x").ok                                   # seven_day keeps the default 95%
+
+
+def test_a_paced_window_waits_while_ahead_of_its_line_until_the_line_catches_up():
+    c = Clock(0.0)
+    a = Admission(caps={"seven_day": 0.9}, paced=("seven_day",), pace_slack=0.1, clock=c)
+    a.observe(limit("allowed", "seven_day", 7 * DAY, seven_day=0.5))   # day 0 of 7: 9% allowed
+    d = a.check("x")
+    assert d.reason == "pace" and "seven_day usage 50% is ahead of its pace (9% by now" in d.detail
+    # on the line when 0.9 * (t/7d + 0.1) == 0.5: t = (0.5/0.9 - 0.1) * 7d
+    assert abs(d.until - (0.5 / 0.9 - 0.1) * 7 * DAY) < 1
+    c.t = d.until + 1
+    assert a.check("x").ok
+    assert a.check("x", paced=False).ok
+    c.t = 0.0
+    assert a.check("x", paced=False).ok                      # a person's turn: not paced
+    a.observe(limit("allowed", "seven_day", 7 * DAY, seven_day=0.95))
+    assert a.check("x", paced=False).reason == "usage"       # ...but the cap holds it
+
+
+def test_pacing_and_caps_bind_only_the_plans_provider():
+    a = Admission(caps={"five_hour": 0.9}, paced=("seven_day",), clock=Clock(0.0))
+    a.observe(limit("allowed", "seven_day", 7 * DAY, five_hour=0.95, seven_day=0.8))
+    assert a.check("x").reason == "usage" and a.check("x", provider="claude_code").reason == "usage"
+    assert a.check("x", provider="local").ok and a.check("x", provider="anthropic").ok
+
+
+def test_an_api_budget_holds_until_enough_spend_ages_out_of_its_period():
+    c = Clock(0.0)
+    a = Admission(budgets={"anthropic": (1.0, 3600)}, clock=c)
+    for t, usd in ((0, 0.4), (600, 0.4), (1200, 0.3)):
+        c.t = t
+        a.observe({"type": "spend", "provider": "anthropic", "usd": usd})
+    d = a.check("sonnet", provider="anthropic")
+    assert (d.reason, d.until) == ("budget", 3600) and "$1.10 in the last 1 h (budget $1.00)" in d.detail
+    assert a.check("sonnet").ok and a.check("x", provider="openai").ok
+    c.t = 3601
+    assert a.check("sonnet", provider="anthropic").ok      # $0.70 in the last hour
+    assert a.state()["spent"] == {"anthropic": 0.7}
 
 
 def test_a_runs_stream_feeds_the_shared_gate(fake):
@@ -126,3 +175,19 @@ def test_a_runs_stream_feeds_the_shared_gate(fake):
     assert st["windows"]["seven_day"]["status"] == "allowed_warning" and st["windows"]["five_hour"]["utilization"] == 0.3
     assert st["backoff_until"] > 0 and shared.streak == 0   # backed off, then the next response ended the streak
     assert shared.check("x").reason == "usage"              # 0.97 is over the default cap
+
+
+def test_a_paid_runs_cost_is_spend_its_providers_budget_paces_on(tmp_path):
+    """runner.run feeds what a priced call cost to admission.shared(): the budget sees real spend, not a guess."""
+    from ai_factory import run
+    from ai_factory.config import Config
+    table = tmp_path / "pricing.toml"
+    table.write_text('[meta]\nfetched_at = 2999-01-01\n\n[stub."stub-1"]\ninput_per_1m = 1000000.0\n'
+                     'output_per_1m = 1000000.0\n')
+    shared = Admission(budgets={"stub": (0.000001, 3600)})
+    admission.set_shared(shared)
+    r = run("hello world", Config(provider="stub", model="stub-1", ledger_path=str(tmp_path / "L.is"),
+                                  pricing_path=str(table)))
+    assert r.success and r.metrics.cost_usd
+    assert shared.state()["spent"]["stub"] == round(r.metrics.cost_usd, 4)
+    assert shared.check("stub-1", provider="stub").reason == "budget"
