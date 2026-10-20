@@ -322,6 +322,8 @@ append_event(
 ## Testing
 
 ```bash
+pip install -e ".[dev]"        # core tests; provider tests whose SDK is missing are skipped
+pip install -e ".[dev,all]"    # every provider SDK, so the full suite runs
 pytest
 ```
 
